@@ -93,6 +93,9 @@ static SWBAppDelegate *appDelegate;
     [serversItem setTitle:_L(Servers)];
     [serversItem setSubmenu:serversMenu];
     [menu addItem:serversItem];
+    
+    NSMenuItem *importConfigItem = [[NSMenuItem alloc]initWithTitle:@"Import" action:@selector(importMapleLeafHostConfigFile) keyEquivalent:@""];
+    [menu addItem:importConfigItem];
 
     [menu addItem:[NSMenuItem separatorItem]];
     [menu addItemWithTitle:_L(Edit PAC for Auto Proxy Mode...) action:@selector(editPAC) keyEquivalent:@""];
@@ -121,6 +124,58 @@ static SWBAppDelegate *appDelegate;
     appDelegate = self;
 }
 
+#pragma mark --- Import fengye zhuji config file.
+- (NSURL *)selectSourceConfigFile {
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    [panel setCanChooseFiles:YES];
+    [panel setCanChooseDirectories:NO];
+    [panel setAllowsMultipleSelection:NO];
+    NSInteger clicked = [panel runModal];
+    if (clicked == NSFileHandlingPanelOKButton) {
+        return [panel URL];
+    }
+    return NULL;
+}
+
+- (NSDictionary *)getJsonDataFromFile:(NSURL *)file {
+    if (!file) {
+        NSLog(@"error: file arg can't be null!");
+        return NULL;
+    }
+    NSData *data = [NSData dataWithContentsOfURL:file];
+    NSError *error = nil;
+    NSDictionary *result = [NSJSONSerialization JSONObjectWithData:data
+                                                           options:NSJSONReadingAllowFragments
+                                                             error:&error];
+    if (error) {
+        NSLog(@"error: failed to read config data: %@", error);
+        return NULL;
+    }
+    return result;
+}
+
+- (Configuration *)createConfigurationFromJsonData:(NSDictionary *)jsonData {
+    if (!jsonData) {
+        NSLog(@"error: json data is null!");
+        return NULL;
+    }
+    NSMutableDictionary *jsonConfigs = [jsonData mutableCopy];
+    jsonConfigs[@"current"] = [NSNumber numberWithInteger:0];
+    jsonConfigs[@"profiles"] = jsonConfigs[@"configs"];
+    Configuration *config = [[Configuration alloc] initWithJSONDictionary:jsonConfigs];
+    return config;
+}
+
+- (void)importMapleLeafHostConfigFile {
+    NSURL *file = [self selectSourceConfigFile];
+    NSDictionary *jsonData = [self getJsonDataFromFile:file];
+    Configuration *config = [self createConfigurationFromJsonData:jsonData];
+    if (!config) { return; }
+    [ProfileManager saveConfiguration:config];
+    [self updateServersMenu];
+}
+
+#pragma mark ---- other features.
 - (NSData *)PACData {
     if ([[NSFileManager defaultManager] fileExistsAtPath:PACPath]) {
         return [NSData dataWithContentsOfFile:PACPath];
